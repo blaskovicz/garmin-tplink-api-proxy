@@ -9,6 +9,7 @@ import redis from "redis";
 import tplinkCloudApi, { login } from "tplink-cloud-api";
 import hs100 from "tplink-cloud-api/distribution/hs100";
 import lb100 from "tplink-cloud-api/distribution/lb100";
+import mogan from "morgan";
 import { promisify } from "util";
 import { v4 } from "uuid";
 
@@ -54,6 +55,7 @@ function decrypt(text: string): string {
 }
 
 const app = express();
+app.use(mogan("combined"));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
@@ -87,19 +89,21 @@ app.all(
     let code: string;
 
     if (req.method === "POST") {
-      try {
-        const client = redis.createClient(redisUrl);
-        const redisSet = promisify(client.set).bind(client);
-        // login
-        code = v4();
-        if (!email || !password) {
-          throw new Error(); // don't even bother with login
-        }
-        const tplink = await login(email, password, code);
-        const accessToken = tplink.getToken();
-        await redisSet(code, encrypt(accessToken), "EX", 300); // code valid for 5min
-      } catch (e) {
+      const client = redis.createClient(redisUrl);
+      const redisSet = promisify(client.set).bind(client);
+      if (!email || !password) {
         formError = "Invalid login credentials provided.";
+      } else {
+        try {
+          // login
+          code = v4();
+          const tplink = await login(email, password, code);
+          const accessToken = tplink.getToken();
+          await redisSet(code, encrypt(accessToken), "EX", 300); // code valid for 5min
+        } catch (e) {
+          formError = "Invalid login credentials provided.";
+          console.warn("login failed:", e.toString());
+        }
       }
     }
 
