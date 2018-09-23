@@ -13,10 +13,12 @@ import { promisify } from "util";
 import { v4 } from "uuid";
 
 dotenv.config();
+
+const secretsPath = "/run/secrets";
 try {
-  const files = readdirSync("/var/run/secrets");
+  const files = readdirSync(secretsPath);
   for (const f of files) {
-    const value = readFileSync(`/var/run/secrets/${f}`, { encoding: "utf8" });
+    const value = readFileSync(`${secretsPath}/${f}`, { encoding: "utf8" });
     const key = f.toUpperCase();
     const prevValue = process.env[key];
     if (prevValue && prevValue !== value) {
@@ -24,7 +26,9 @@ try {
     }
     process.env[key] = value;
   }
-} catch (e) {}
+} catch (e) {
+  console.warn("Failed to load secrets:", e.toString());
+}
 
 const redisUrl = process.env.REDIS_URL;
 
