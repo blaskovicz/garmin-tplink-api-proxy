@@ -1,0 +1,26 @@
+version: "3.3"
+
+services:
+  web:
+    image: 127.0.0.1:5000/garmin-tplink-api-proxy
+    build: .
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: verbose
+    ports:
+      - "3095:3095"
+    secrets:
+      - source: garmin-tplink-api-proxy_redis_url_v1
+        target: redis_url
+      - source: garmin-tplink-api-proxy_client_id_to_secret_v1
+        target: client_id_to_secret
+      - source: garmin-tplink-api-proxy_crypto_secret_v1
+        target: crypto_secret
+
+secrets:
+  garmin-tplink-api-proxy_redis_url_v1:
+    external: true
+  garmin-tplink-api-proxy_client_id_to_secret_v1:
+    external: true
+  garmin-tplink-api-proxy_crypto_secret_v1:
+    external: true
