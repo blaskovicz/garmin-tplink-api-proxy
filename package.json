@@ -23,7 +23,7 @@
     "express-async-handler": "^1.1.4",
     "morgan": "^1.9.1",
     "redis": "^2.8.0",
-    "tplink-cloud-api": "^0.x",
+    "tplink-cloud-api": "^0.3.5",
     "uuid": "^3.3.2",
     "winston": "^3.1.0"
   },

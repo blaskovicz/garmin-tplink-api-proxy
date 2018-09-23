@@ -5,11 +5,11 @@ import escapeHtml from "escape-html";
 import express from "express";
 import expressAsyncHandler from "express-async-handler";
 import { readdirSync, readFileSync } from "fs";
+import morgan from "morgan";
 import redis from "redis";
 import tplinkCloudApi, { login } from "tplink-cloud-api";
 import hs100 from "tplink-cloud-api/distribution/hs100";
 import lb100 from "tplink-cloud-api/distribution/lb100";
-import mogan from "morgan";
 import { promisify } from "util";
 import { v4 } from "uuid";
 
@@ -55,7 +55,7 @@ function decrypt(text: string): string {
 }
 
 const app = express();
-app.use(mogan("combined"));
+app.use(morgan("combined"));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
