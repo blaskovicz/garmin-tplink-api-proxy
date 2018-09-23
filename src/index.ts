@@ -161,18 +161,25 @@ app.all(
 app.post(
   "/oauth2/token",
   expressAsyncHandler(async (req: express.Request, res: express.Response) => {
-    const {
+    let {
       grant_type,
       client_id,
       client_secret,
       redirect_uri,
       code
     } = req.query;
-    if (
-      !client_id ||
-      !clientIdToSecret[client_id] ||
-      clientIdToSecret[client_id] !== client_secret
-    ) {
+
+    // also allow body params
+    grant_type = grant_type || req.body.grant_type;
+    client_id = client_id || req.body.client_id;
+    client_secret = client_secret || req.body.client_secret;
+    redirect_uri = redirect_uri || req.body.redirect_uri;
+    code = code || req.body.code;
+
+    if (!client_id || !clientIdToSecret[client_id]) {
+      return res.status(400).json({ message: "invalid client_id provided" });
+    }
+    if (clientIdToSecret[client_id] !== client_secret) {
       return res
         .status(400)
         .json({ message: "invalid client_id/client_secret provided" });
