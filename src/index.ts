@@ -1,16 +1,16 @@
-import asyncHandler from "express-async-handler";
-import express from "express";
-import escape from "escape-html";
-import bodyParser, { json } from "body-parser";
-import TPLink, { login } from "tplink-cloud-api";
-import { v4 } from "uuid";
+import bodyParser from "body-parser";
 import crypto from "crypto";
-import LB100 from "tplink-cloud-api/distribution/lb100";
-import HS100 from "tplink-cloud-api/distribution/hs100";
-import { promisify } from "util";
-import redis from "redis";
 import dotenv from "dotenv";
+import escapeHtml from "escape-html";
+import express from "express";
+import expressAsyncHandler from "express-async-handler";
 import { readdirSync, readFileSync } from "fs";
+import redis from "redis";
+import tplinkCloudApi, { login } from "tplink-cloud-api";
+import hs100 from "tplink-cloud-api/distribution/hs100";
+import lb100 from "tplink-cloud-api/distribution/lb100";
+import { promisify } from "util";
+import { v4 } from "uuid";
 
 dotenv.config();
 try {
@@ -37,14 +37,14 @@ const password = process.env.CRYPTO_SECRET || "feedbeef";
 // Part of https://github.com/chris-rock/node-crypto-examples
 // Nodejs encryption with CTR
 function encrypt(text: string): string {
-  var cipher = crypto.createCipher(algorithm, password);
-  var crypted = cipher.update(text, "utf8", "hex");
+  const cipher = crypto.createCipher(algorithm, password);
+  let crypted = cipher.update(text, "utf8", "hex");
   crypted += cipher.final("hex");
   return crypted;
 }
 function decrypt(text: string): string {
-  var decipher = crypto.createDecipher(algorithm, password);
-  var dec = decipher.update(text, "hex", "utf8");
+  const decipher = crypto.createDecipher(algorithm, password);
+  let dec = decipher.update(text, "hex", "utf8");
   dec += decipher.final("utf8");
   return dec;
 }
@@ -57,7 +57,7 @@ app.use(bodyParser.json());
 // <- redirect with code&state or error
 app.all(
   "/oauth2/authorize",
-  asyncHandler(async (req: express.Request, res: express.Response) => {
+  expressAsyncHandler(async (req: express.Request, res: express.Response) => {
     if (req.method !== "GET" && req.method !== "POST") {
       return res.status(400).json({ message: "invalid request method" });
     }
@@ -66,12 +66,14 @@ app.all(
     const { email, password } = req.body;
     if (!client_id || !clientIdToSecret[client_id]) {
       return res.status(400).json({ message: "invalid client_id provided" });
-    } else if (
+    }
+    if (
       redirect_uri !== "http://localhost" &&
       redirect_uri !== "https://localhost"
     ) {
       return res.status(400).json({ message: "invalid redirect_uri provided" });
-    } else if (response_type !== "code") {
+    }
+    if (response_type !== "code") {
       return res
         .status(400)
         .json({ message: "invalid response_type requested" });
@@ -118,9 +120,9 @@ app.all(
             </p>
             ${
               formError
-                ? '<div class="alert alert-danger">Error; ' +
-                  escape(formError) +
-                  "</div>"
+                ? `<div class="alert alert-danger">Error! ${escapeHtml(
+                    formError
+                  )}</div>`
                 : ""
             }
             <form method="POST">
@@ -150,7 +152,7 @@ app.all(
 // <- response { "access_token": token, "token_type": "bearer", expires_in: null, refresh_token: null}
 app.post(
   "/oauth2/token",
-  asyncHandler(async (req: express.Request, res: express.Response) => {
+  expressAsyncHandler(async (req: express.Request, res: express.Response) => {
     const {
       grant_type,
       client_id,
@@ -166,14 +168,17 @@ app.post(
       return res
         .status(400)
         .json({ message: "invalid client_id/client_secret provided" });
-    } else if (
+    }
+    if (
       redirect_uri !== "http://localhost" &&
       redirect_uri !== "https://localhost"
     ) {
       return res.status(400).json({ message: "invalid redirect_uri provided" });
-    } else if (grant_type !== "authorization_code") {
+    }
+    if (grant_type !== "authorization_code") {
       return res.status(400).json({ message: "invalid grant_type requested" });
-    } else if (!code) {
+    }
+    if (!code) {
       return res.status(400).json({ message: "invalid code provided" });
     }
 
@@ -191,22 +196,22 @@ app.post(
 
 app.get(
   "/api/v1/devices",
-  asyncHandler(async (req: express.Request, res: express.Response) => {
+  expressAsyncHandler(async (req: express.Request, res: express.Response) => {
     const accessToken = (req.headers["authorization"] || "").split(" ")[1];
     if (!accessToken) {
       return res.status(401).json({ message: "not authenticated" });
     }
 
-    const tplink = new TPLink(accessToken, v4());
+    const tplink = new tplinkCloudApi(accessToken, v4());
     const devices = await tplink.getDeviceList();
     for (const rawDevice of devices) {
       rawDevice.is_on = false;
       const device = tplink.newDevice(rawDevice);
       if (device.status !== 1) continue; // can only request status of online devices
       if (device.genericType === "bulb") {
-        rawDevice.is_on = await (device as LB100).isOn();
+        rawDevice.is_on = await (device as lb100).isOn();
       } else if (device.genericType === "plug") {
-        rawDevice.is_on = await (device as HS100).isOn();
+        rawDevice.is_on = await (device as hs100).isOn();
       }
     }
     res.json(devices);
@@ -215,19 +220,21 @@ app.get(
 
 app.put(
   "/api/v1/devices/:id",
-  asyncHandler(async (req: express.Request, res: express.Response) => {
+  expressAsyncHandler(async (req: express.Request, res: express.Response) => {
     const accessToken = (req.headers["authorization"] || "").split(" ")[1];
     if (!accessToken) {
       return res.status(401).json({ message: "not authenticated" });
-    } else if (!req.params.id) {
+    }
+    if (!req.params.id) {
       return res.status(400).json({ message: "invalid device id provided" });
-    } else if (req.body.is_on === undefined || req.body.is_on == null) {
+    }
+    if (req.body.is_on === undefined || req.body.is_on == null) {
       return res
         .status(400)
         .json({ message: "unsupported update payload in request body" });
     }
 
-    const tplink = new TPLink(accessToken, v4());
+    const tplink = new tplinkCloudApi(accessToken, v4());
     const device = (await tplink.getDeviceList())
       .map(d => tplink.newDevice(d))
       .find(d => d.id === req.params.id);
@@ -239,9 +246,9 @@ app.put(
     }
 
     if (device.genericType === "bulb") {
-      await (device as LB100)[req.body.is_on ? "powerOn" : "powerOff"]();
+      await (device as lb100)[req.body.is_on ? "powerOn" : "powerOff"]();
     } else if (device.genericType === "plug") {
-      await (device as HS100)[req.body.is_on ? "powerOn" : "powerOff"]();
+      await (device as hs100)[req.body.is_on ? "powerOn" : "powerOff"]();
     } else {
       return res.status(501).json({ message: "not implemented" });
     }
