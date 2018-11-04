@@ -8,6 +8,7 @@ import { readdirSync, readFileSync } from "fs";
 import morgan from "morgan";
 import redis from "redis";
 import tplinkCloudApi, { login } from "tplink-cloud-api";
+import { ResponseError } from "tplink-cloud-api/distribution/api-utils";
 import hs100 from "tplink-cloud-api/distribution/hs100";
 import lb100 from "tplink-cloud-api/distribution/lb100";
 import { promisify } from "util";
@@ -27,8 +28,8 @@ try {
     }
     process.env[key] = value;
   }
-} catch (e) {
-  console.warn("Failed to load secrets:", e.toString());
+} catch (err) {
+  console.warn("Failed to load secrets:", err.message);
 }
 
 const redisUrl = process.env.REDIS_URL;
@@ -58,6 +59,28 @@ const app = express();
 app.use(morgan("combined"));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use(
+  (
+    err: Error,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error(err.stack);
+    if (res.headersSent) {
+      return next(err);
+    }
+    let code = 500;
+    if (err instanceof ResponseError) {
+      if (err.isTokenExpired()) {
+        code = 401;
+      } else {
+        code = 400;
+      }
+    }
+    res.status(code).json({ message: err.message });
+  }
+);
 
 // GET /oauth2/authorize?redirect_uri=...&client_id=...&state=TODO&response_type=code
 // <- redirect with code&state or error
@@ -100,9 +123,9 @@ app.all(
           const tplink = await login(email, password, code);
           const accessToken = tplink.getToken();
           await redisSet(code, encrypt(accessToken), "EX", 300); // code valid for 5min
-        } catch (e) {
+        } catch (err) {
           formError = "Invalid login credentials provided.";
-          console.warn("login failed:", e.toString());
+          console.warn("login failed:", err.message);
         }
       }
     }
@@ -222,12 +245,19 @@ app.get(
     for (const rawDevice of devices) {
       rawDevice.is_on = false;
       const device = tplink.newDevice(rawDevice);
-      if (device.status !== 1) continue; // can only request status of online devices
+      if (device.disconnected) continue; // can only request status of online devices
       if (device.genericType === "bulb") {
-        rawDevice.is_on = await (device as lb100).isOn();
+        rawDevice.is_onP = (device as lb100).isOn();
       } else if (device.genericType === "plug") {
-        rawDevice.is_on = await (device as hs100).isOn();
+        rawDevice.is_onP = (device as hs100).isOn();
       }
+    }
+
+    // now await all requests that are in-flight
+    for (const rawDevice of devices) {
+      if (rawDevice.is_onP === undefined) continue;
+      rawDevice.is_on = await rawDevice.is_onP;
+      delete rawDevice.is_onP;
     }
     res.json(devices);
   })
@@ -256,7 +286,7 @@ app.put(
     if (!device) {
       return res.status(404).json({ message: "device not found" });
     }
-    if (device.status !== 1) {
+    if (device.disconnected) {
       return res.status(400).json({ message: "cannot update offline device" });
     }
 
