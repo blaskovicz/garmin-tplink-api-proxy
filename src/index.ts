@@ -59,28 +59,6 @@ const app = express();
 app.use(morgan("combined"));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(
-  (
-    err: Error,
-    req: express.Request,
-    res: express.Response,
-    next: express.NextFunction
-  ) => {
-    console.error(err.stack);
-    if (res.headersSent) {
-      return next(err);
-    }
-    let code = 500;
-    if (err instanceof ResponseError) {
-      if (err.isTokenExpired()) {
-        code = 401;
-      } else {
-        code = 400;
-      }
-    }
-    res.status(code).json({ message: err.message });
-  }
-);
 
 // GET /oauth2/authorize?redirect_uri=...&client_id=...&state=TODO&response_type=code
 // <- redirect with code&state or error
@@ -300,6 +278,29 @@ app.put(
 
     res.json({ message: "update successful" });
   })
+);
+
+app.use(
+  (
+    err: any,
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    console.error("[error-handler]", err.stack);
+    if (res.headersSent) {
+      return next(err);
+    }
+    let code = 500;
+    if (err instanceof ResponseError) {
+      if (err.isTokenExpired()) {
+        code = 401;
+      } else {
+        code = 400;
+      }
+    }
+    res.status(code).json({ message: err.message });
+  }
 );
 
 app.listen(process.env.PORT || 3000);
